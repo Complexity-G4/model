@@ -5,6 +5,28 @@ import matplotlib.pyplot as plt
 
 t = 12*5     # length of the simulation --> must be at least 12 months for accuracy of stats and probs
 
+## initialising statistics (percentages):
+p_latentTB = 0.148              # unpub source
+p_TBD = 0.041                   # unpub source
+#p_TBD = 3.13e-3                # https://www.atsjournals.org/doi/full/10.1164/rccm.200409-1200OC
+p_susceptible = 1 - p_latentTB - p_TBD
+p_hiv_pos = 0.144               # unpub source
+
+## probabilities:
+#p_TBD_if_hiv+ = 0.106          # b
+p_TBD_close_contacts = 0.04     # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6534268/
+p_TBD_mortality = 0.06          # http://www.samj.org.za/index.php/samj/article/view/12734
+p_TBD_death_on_treatment = 0.05 # conf by Dr
+p_TBD_death_no_treatment = 0.2  # conf by Dr (hosp deaths) (20%)
+p_reinfection_TBD = 0.18        # https://www.atsjournals.org/doi/full/10.1164/rccm.200409-1200OC
+
+## treatments:
+IPT_efficacy = 0.55             # https://journals.lww.com/aidsonline/fulltext/2003/09260/efficacy_of_secondary_isoniazid_preventive_therapy.7.aspx
+death_hiv_neg_no_treatment = 0.45 # WHO: https://www.who.int/news-room/fact-sheets/detail/tuberculosis
+death_hiv_pos_no_treatment = 0.9  # WHO: https://www.who.int/news-room/fact-sheets/detail/tuberculosis
+p_self_cure_hiv_neg_no_TBT = 1/3  # conf by Dr
+
+
 def build_ba_model(n, m):
     # a function that builds a power-law graph (BA = scale-free)
     # n is the number of people, m is the average number of connections of each node
@@ -12,7 +34,7 @@ def build_ba_model(n, m):
     return G
 
 
-# need to make sure that at least 1 person actually starts with TB !!
+# need to make sure that at least 1 person actually starts with TB!
 def add_attributes(G):
     # a function that adds initial attributes to each node
     # lists so time evolution can be added
@@ -24,10 +46,10 @@ def add_attributes(G):
         # 0 is susceptible, 1 is TBD, 2 is TB infected
         # chooses one of 0, 1, 2, with probs in p:
         #G.nodes[node]['state'] = list(np.random.choice([0, 1, 2], 1, p=[0.98734, 6.86e-3, 5.8e-3])) # check stats w PHRU
-        G.nodes[node]['state'] = list(np.random.choice([0, 1, 2], 1, p=[0.9, 0.04, 0.06]))
+        G.nodes[node]['state'] = list(np.random.choice([0, 1, 2], 1, p=[p_susceptible, p_TBD, p_latentTB]))
 
         # assigns HIV+ status w prob p:
-        G.nodes[node]['HIV_status'] = [np.random.binomial(1, 0.013)] # HIV incidence SA
+        G.nodes[node]['HIV_status'] = [np.random.binomial(1, p_hiv_pos)] # HIV incidence SA
 
         ## Interventions
         # no one starts on TBT:
@@ -93,7 +115,6 @@ def infect(G, time, root, num, visited, weight):
 # if on preventative treatment or not
 # --> prob of re-infection (with disease)
 # --> prob of death (?)
-# IS IT POSSIBLE TO FULLY RECOVER FROM TB ??
 
 def state(G, connected_state, node, time, weight): 
     # a function that determines the next state of the given node
@@ -105,13 +126,13 @@ def state(G, connected_state, node, time, weight):
             # HIV_status
             if G.nodes[node]['HIV_status'] == [1]: # HIV_pos
                 if connected_state == 1: # if the connected node has TB disease
-                  disease = np.random.binomial(1, 0.04*20*weight) # prob of infection with TB if HIV+
+                  disease = np.random.binomial(1, p_TBD_close_contacts*20*weight) # prob of infection with TB if HIV+
                   lst.append(disease)
                 else:
                   lst.append(0)
             else: # HIV_neg
                 if connected_state == 1:
-                  disease = np.random.binomial(1, 0.04*weight) # prob of infection with TB if HIV-
+                  disease = np.random.binomial(1, p_TBD_close_contacts*weight) # prob of infection with TB if HIV-
                   lst.append(disease)
                 else:
                   lst.append(0)
@@ -121,13 +142,13 @@ def state(G, connected_state, node, time, weight):
                 # HIV_status
                 if G.nodes[node]['HIV_status'] == [1]:  # HIV_pos
                     if connected_state == 1:  # if the connected node has TB disease
-                        disease = np.random.binomial(1, 0.04*20*weight)  # prob of infection with TB if HIV+
+                        disease = np.random.binomial(1, p_TBD_close_contacts*20*weight)  # prob of infection with TB if HIV+
                         lst.append(disease)
                     else:
                         lst.append(0)
                 else:  # HIV_neg
                     if connected_state == 1:
-                        disease = np.random.binomial(1, 0.04*weight)  # prob of infection with TB if HIV-
+                        disease = np.random.binomial(1, p_TBD_close_contacts*weight)  # prob of infection with TB if HIV-
                         lst.append(disease)
                     else:
                         lst.append(0)
@@ -136,7 +157,7 @@ def state(G, connected_state, node, time, weight):
         if len(lst) < (time+2):
 
             if G.nodes[node]['TB_treatment'] == [1]:
-                death = np.random.binomial(1, 0.05)   # probability of death if TB disease and on treatment: 5% die on treatment
+                death = np.random.binomial(1, p_TBD_death_on_treatment)
                 if death == 1 or type(recover(lst, node, G)) == str: #includes risks of death based on HIV status
                     weight_to_zero(G, node)
                     G.nodes[node]['alive'] = [0]
@@ -147,10 +168,10 @@ def state(G, connected_state, node, time, weight):
                 else:
                     lst.append(1)
             else: # not on TBT
-                death = np.random.binomial(1, 0.20)  # probability of death if TB disease and not on treatment (many die in hospitals)
+                death = np.random.binomial(1, p_TBD_death_no_treatment)
                 if death == 1 or type(recover(lst, node, G)) == str:
                     weight_to_zero(G, node)
-                    G.nodes[node]['alive'] = [0] # why are there errors here?
+                    G.nodes[node]['alive'] = [0]
                     lst.append(1)
                 elif recover(lst, node, G):
                     lst.append(2)
@@ -162,13 +183,13 @@ def state(G, connected_state, node, time, weight):
 
              if G.nodes[node]['IPT'] == [1]: # on IPT
                  if connected_state == 1:  # if the connected node has TB disease
-                     reinfect = np.random.binomial(1, 0.5*weight) + 1  #  ??? (1 - prob of re-infection with TB disease)
+                     reinfect = np.random.binomial(1, p_reinfection_TBD*(1-IPT_efficacy)*weight) + 1
                      lst.append(reinfect)
                  else:
                      lst.append(2)
              else:  # not on IPT
                  if connected_state == 1:
-                     reinfect = np.random.binomial(1, 0.9*weight) + 1  # ???
+                     reinfect = np.random.binomial(1, p_reinfection_TBD*weight) + 1
                      lst.append(reinfect)
                  else:
                      lst.append(2)
@@ -177,13 +198,13 @@ def state(G, connected_state, node, time, weight):
              if lst[time + 1] == 0 and connected_state == 1:  # if the node has been in contact with infected individuals
                  if G.nodes[node]['IPT'] == [1]:  # on IPT
                      if connected_state == 1:  # if the connected node has TB disease
-                         reinfect = np.random.binomial(1, 0.5*weight) + 1  # ??? (1 - prob of re-infection with TB disease)
+                         reinfect = np.random.binomial(1, p_reinfection_TBD*(1-IPT_efficacy)*weight) + 1
                          lst.append(reinfect)
                      else:
                          lst.append(2)
                  else:  # not on IPT
                      if connected_state == 1:
-                         reinfect = np.random.binomial(1, 0.9*weight) + 1  # ???
+                         reinfect = np.random.binomial(1, p_reinfection_TBD*weight) + 1  # ???
                          lst.append(reinfect)
                      else:
                          lst.append(2)
@@ -191,18 +212,25 @@ def state(G, connected_state, node, time, weight):
     return
 
 
-def spread(G, n):
+def spread(G, n, lst):
     # function to spread a disease over a given number of time steps
     time = 0
     root = r.randint(0, n-1)     # chooses a random root at which to start checking the spread
     weight = 1  # initial weight for root infected node, not important
+
+    time_imp = lst[0]  # time
+    type = lst[1]      # type
+    letter = lst[2]    # letter
     while time < t:
-        #'''
-        ## IMPLEMENT INTERVENTIONS certain time steps:
-        #if time == 0 or time == 3 or time == 6 or time == 12:
-            #wide_treatment(G, A, time)
-            #cluster_treatment(G, A, time)
-        #'''
+
+        ## IMPLEMENT INTERVENTIONS at certain time steps:
+        if time == time_imp:
+            if type == 'wide':
+                wide_treatment(G, letter, time)
+                print('wide')
+            elif type == 'cluster':
+                cluster_treatment(G, letter, time)
+
         visited =[]
         state(G, G.nodes[root]['state'][time], root, time, weight)  # updates root
         infect(G, time, root, G.nodes[root]['state'][time], visited, weight)
@@ -211,33 +239,33 @@ def spread(G, n):
 
 ## INTERVENTIONS
 
-def wide_treatment(G, num, time):
+def wide_treatment(G, str, time):
     # function to give treatment to everyone who needs it
     # in a sense, implies limitless resources (nurses, time, follow-up, money etc)
-    # num is a letter (in A, B, C) indicating the type of treatment:
-        # num == A --> plan A: implement both IPT and TBT
-        # num == B --> plan B: implement only TBT
-        # num == C --> plan C: implement only IPT
+    # str is a letter (in A, B, C) indicating the type of treatment:
+        # str == A --> plan A: implement both IPT and TBT
+        # str == B --> plan B: implement only TBT
+        # str == C --> plan C: implement only IPT
 
     for node in G.nodes:
         # give all agents with TB disease treatment, make sure they aren't on IPT:
-        if G.nodes[node]['state'][time] == 1 and (num == A or num == B):
+        if G.nodes[node]['state'][time] == 1 and (str == 'A' or str == 'B'):
             G.nodes[node]['TB_treatment'] = [1]
             G.nodes[node]['IPT'] = [0]
         # give all agents with TB infection OR HIV+ IPT if not on TBT
-        elif (G.nodes[node]['state'][time] == 2 or G.nodes[node]['HIV_status'] == [1]) and G.nodes[node]['TB_treatment'] == [0] and (num == A or num == C):
+        elif (G.nodes[node]['state'][time] == 2 or G.nodes[node]['HIV_status'] == [1]) and G.nodes[node]['TB_treatment'] == [0] and (str == 'A' or str == 'C'):
             G.nodes[node]['IPT'] = [1]
     return
 
-def cluster_treatment(G, num, time):
+def cluster_treatment(G, str, time):
     # function to give treatment only to clusters
     # what does this mean realistically?
     # num as as before
     for node in G.nodes:
-        if nx.clustering(G)[node] > 0.1 and G.nodes[node]['state'][time] == 1 and (num == A or num == B):
+        if nx.clustering(G)[node] > 0.1 and G.nodes[node]['state'][time] == 1 and (str == 'A' or str == 'B'):
             G.nodes[node]['TB_treatment'] = [1]
             G.nodes[node]['IPT'] = [0]
-        elif nx.clustering(G)[node] > 0.1 and (G.nodes[node]['state'][time] == 2 or G.nodes[node]['HIV_status'] == [1]) and G.nodes[node]['TB_treatment'] == [0] and (num == A or num == C):
+        elif nx.clustering(G)[node] > 0.1 and (G.nodes[node]['state'][time] == 2 or G.nodes[node]['HIV_status'] == [1]) and G.nodes[node]['TB_treatment'] == [0] and (str == 'A' or str == 'C'):
             G.nodes[node]['IPT'] = [1]
     return
 
@@ -261,9 +289,9 @@ def recover(lst, node, G):
         else:
             return False
 
-    # if HIV infected, stay TBD or die (eventually)
+    # if HIV infected, stay TBD or die (eventually) with no treatment
     elif G.nodes[node]['HIV_status'] == [1]:
-        death = np.random.binomial(1, 0.5) # probability of dying from TB if HIV+ and NOT on treatment (check)
+        death = np.random.binomial(1, death_hiv_pos_no_treatment) # probability of dying from TB if HIV+ and NOT on treatment (check)
         if death == 1:
             return 'death'
         else:
@@ -273,8 +301,8 @@ def recover(lst, node, G):
     else:
         num = 24 # infectious period 24 months if no treatment and HIV+
         if summ > num:
-            death = np.random.binomial(1, 1/3)
-            self_cure = np.random.binomial(1, 1 / 3)
+            death = np.random.binomial(1, death_hiv_neg_no_treatment) # or 1/3?
+            self_cure = np.random.binomial(1, 1 / 3)  # from epi
             if death == 1:
                 return 'death'
             elif self_cure == 1:
@@ -323,16 +351,42 @@ def data(G):
         tot_TBi.append(r)
 
     death_list = [elem for elem in DEATHS.values()]
-    #d = [x for x, y in G.nodes(data=True) if y['alive'] == 0]
     d = death_list.count([0])
     tot_deaths.append(d)
 
+    # changing from 0->1 or 2->1:
+    move_to_TBD = 0
+    move_to_LTB = 0
+    TBD_recoveries = 0
+    LTB_recoveries = 0
+    for node in DATA:
+        for i in range(len(DATA[node])):
+            if i < len(DATA[node]) - 1:
+                # if person gets active TBD
+                if (DATA[node][i] == 0 and DATA[node][i+1] == 1) or (DATA[node][i] == 2 and DATA[node][i+1] == 1):
+                    move_to_TBD += 1
+                # if person becomes infected with LTB
+                #elif DATA[node][i] == 0 and DATA[node][i+1] == 2:
+                    #move_to_LTB += 1
+                    #break # so that the same person moving is not counted more than once
+                elif DATA[node][i] == 1 and DATA[node][i+1] == 2:
+                    TBD_recoveries += 1
+                #elif DATA[node][i] == 2 and DATA[node][i+1] == 0:
+                    #LTB_recoveries += 1
+
     # print all necessary information
-    print('Infectious people at end of trial:', tot_TBd[-1])
     print('# deaths attributable to TBD:', tot_deaths[-1])
+    print('# people who contracted active TBD:', move_to_TBD)
+    #print('# people who were infected with LTB:', move_to_LTB)
+    print('# recoveries from TBD', TBD_recoveries)
+    #print('# recoveries from LTB', LTB_recoveries)
+
+    print('# infectious people at end of trial:', tot_TBd[-1])
     print('Maximum # of people with TBD at a point:', max(tot_TBd), 'occurs at', tot_TBd.index(max(tot_TBd)), 'months')
     print('Maximum # of people with TBI at a point:', max(tot_TBi), 'occurs at', tot_TBi.index(max(tot_TBi)), 'months')
     print('# of people never infected', tot_S[-1])
+
+    print('-----------------------------------------------------')
 
     return data
 
@@ -350,18 +404,42 @@ def colour(G, t):
             colour_map.append('orange')
     return colour_map
 
+def compare(G, n, lst):
+
+    spread(G, n, lst)
+
+    plt.plot(data(G)[0], 'g-', label='susceptible')  # plotting time evolution of number of susceptible
+    plt.plot(data(G)[1], 'r-', label='active TBD')  # plotting time evolution of number of TBD
+    plt.plot(data(G)[2], 'y-', label='LTB infected')  # plotting time evolution of number of high risk
+    plt.xlabel('time (months)')
+    plt.ylabel('population')
+    plt.title('Graph showing the time evolution of the TB states of the simulated population')
+    plt.legend()
+    plt.show()
+
+    nx.draw(G, node_color=colour(G, t), node_size=30)  # --> draws the graph G at end of trial
+    plt.show()
 
 if __name__ == "__main__":
     n = 100  # number of nodes at time t = 0.
     m = 3
     G = setup(n, m)
-    nx.draw(G, node_color=colour(G, 0), node_size=30) # --> draws the graph G at start of trial
+    nx.draw(G, node_color=colour(G, 0), node_size=30)  # --> draws the graph G at start of trial
     plt.show()
-    spread(G,n)
-    nx.draw(G, node_color=colour(G, t), node_size=30) # --> draws the graph G at end of trial
-    plt.show()
-    plt.plot(data(G)[0]) # plotting time evolution of number of susceptible
-    plt.plot(data(G)[1]) # plotting time evolution of number of TBD
-    plt.plot(data(G)[2]) # plotting time evolution of number of high risk
-    #plt.plot(data(G)[3]) # plotting time evolution of number of deaths # there is no time evol currently
-    plt.show()
+
+    none = G
+    WA = G
+    WB = G
+    WC = G
+    CA = G
+    CB = G
+    CC = G
+
+    compare(none, n, [0, 'none', 0])
+    #compare(WA, n, [0, 'wide', 'A'])
+    #compare(WB, n, [0, 'wide', 'B'])
+    #compare(WC, n, [0, 'wide', 'c'])
+
+    #compare(CA, n, [0, 'cluster', 'A'])
+    #compare(CB, n, [0, 'cluster', 'B'])
+    #compare(CC, n, [0, 'cluster', 'C'])
