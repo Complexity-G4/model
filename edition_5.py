@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 t = 12*5     # length of the simulation --> must be at least 12 months for accuracy of stats and probs
+t_int = 12    # # months after baseline at which treatment is administered
 
 ## initialising statistics (percentages):
 p_latentTB = 0.148              # unpub source
@@ -15,13 +16,13 @@ p_hiv_pos = 0.144               # unpub source
 ## probabilities:
 #p_TBD_if_hiv+ = 0.106          # b
 p_TBD_close_contacts = 0.04     # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6534268/
-p_TBD_mortality = 0.06          # http://www.samj.org.za/index.php/samj/article/view/12734
+#p_TBD_mortality = 0.06          # http://www.samj.org.za/index.php/samj/article/view/12734
 p_TBD_death_on_treatment = 0.05 # conf by Dr
 p_TBD_death_no_treatment = 0.2  # conf by Dr (hosp deaths) (20%)
 p_reinfection_TBD = 0.18        # https://www.atsjournals.org/doi/full/10.1164/rccm.200409-1200OC
 
 ## treatments:
-IPT_efficacy = 0.55             # https://journals.lww.com/aidsonline/fulltext/2003/09260/efficacy_of_secondary_isoniazid_preventive_therapy.7.aspx
+IPT_efficacy = 0.55               # https://journals.lww.com/aidsonline/fulltext/2003/09260/efficacy_of_secondary_isoniazid_preventive_therapy.7.aspx
 death_hiv_neg_no_treatment = 0.45 # WHO: https://www.who.int/news-room/fact-sheets/detail/tuberculosis
 death_hiv_pos_no_treatment = 0.9  # WHO: https://www.who.int/news-room/fact-sheets/detail/tuberculosis
 p_self_cure_hiv_neg_no_TBT = 1/3  # conf by Dr
@@ -100,7 +101,7 @@ def infect(G, time, root, num, visited, weight):
                 return
 
 
-# probabilities code:
+## probabilities code:
 
 # what needs to happen:
 ## if node is 0 = susceptible
@@ -227,7 +228,6 @@ def spread(G, n, lst):
         if time == time_imp:
             if type == 'wide':
                 wide_treatment(G, letter, time)
-                print('wide')
             elif type == 'cluster':
                 cluster_treatment(G, letter, time)
 
@@ -324,7 +324,8 @@ def rm_edge_weight(G, threshold):
             if G[edge[0]][edge[1]]['weight'] <= threshold:
                 G[edge[0]][edge[1]]['weight'] = 0
 
-# Data code 
+
+# Data collection over time
 
 def data(G):
     DATA = nx.get_node_attributes(G,'state') # dictionary -> node : [list of states of that node for all times]
@@ -377,9 +378,9 @@ def data(G):
     # print all necessary information
     print('# deaths attributable to TBD:', tot_deaths[-1])
     print('# people who contracted active TBD:', move_to_TBD)
-    #print('# people who were infected with LTB:', move_to_LTB)
+    print('# people who were infected with LTB:', move_to_LTB)
     print('# recoveries from TBD', TBD_recoveries)
-    #print('# recoveries from LTB', LTB_recoveries)
+    print('# recoveries from LTB', LTB_recoveries)
 
     print('# infectious people at end of trial:', tot_TBd[-1])
     print('Maximum # of people with TBD at a point:', max(tot_TBd), 'occurs at', tot_TBd.index(max(tot_TBd)), 'months')
@@ -404,6 +405,7 @@ def colour(G, t):
             colour_map.append('orange')
     return colour_map
 
+
 def compare(G, n, lst):
 
     spread(G, n, lst)
@@ -420,8 +422,9 @@ def compare(G, n, lst):
     nx.draw(G, node_color=colour(G, t), node_size=30)  # --> draws the graph G at end of trial
     plt.show()
 
+
 if __name__ == "__main__":
-    n = 100  # number of nodes at time t = 0.
+    n = 500  # number of nodes at time t = 0.
     m = 3
     G = setup(n, m)
     nx.draw(G, node_color=colour(G, 0), node_size=30)  # --> draws the graph G at start of trial
@@ -436,10 +439,11 @@ if __name__ == "__main__":
     CC = G
 
     compare(none, n, [0, 'none', 0])
-    #compare(WA, n, [0, 'wide', 'A'])
-    #compare(WB, n, [0, 'wide', 'B'])
-    #compare(WC, n, [0, 'wide', 'c'])
 
-    #compare(CA, n, [0, 'cluster', 'A'])
-    #compare(CB, n, [0, 'cluster', 'B'])
-    #compare(CC, n, [0, 'cluster', 'C'])
+    #compare(WA, n, [t_int, 'wide', 'A'])
+    #compare(WB, n, [t_int, 'wide', 'B'])
+    #compare(WC, n, [t_int, 'wide', 'c'])
+
+    #compare(CA, n, [t_int, 'cluster', 'A'])
+    #compare(CB, n, [t_int, 'cluster', 'B'])
+    #compare(CC, n, [t_int, 'cluster', 'C'])
